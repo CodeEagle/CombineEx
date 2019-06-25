@@ -8,7 +8,7 @@ Installation
 ---
 Swift Package Manager
 ```
-.package(url: "https://github.com/CodeEagle/CombineEx.it", from: "1.0.0")
+.package(url: "https://github.com/CodeEagle/CombineEx.git", from: "1.0.0")
 ```
 
 `All`
