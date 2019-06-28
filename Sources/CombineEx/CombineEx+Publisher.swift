@@ -8,6 +8,7 @@ public extension Publisher {
     /// - parameter onValue: The closure to execute on receipt of a value. If `nil`, the sink uses an empty closure.
     /// - parameter onCompletion: The closure to execute on completion. If `nil`, the sink uses an empty closure.
     /// - Returns: A subscriber that performs the provided closures upon receiving values or completion.
+    @inline(__always)
     @discardableResult func discardableSink(onValue: @escaping ((Self.Output) -> Void), onCompletion: ((Subscribers.Completion<Self.Failure>) -> Void)? = nil) -> Subscribers.Sink<Self> {
         return sink(receiveCompletion: onCompletion, receiveValue: onValue)
     }
@@ -19,6 +20,7 @@ public extension Publisher {
     /// - SeeAlso: `receive(subscriber:)`
     /// - Parameters:
     ///     - subscriber: The subscriber to attach to this `Publisher`. After attaching, the subscriber can start to receive values.
+    @inline(__always)
     func addSubscriber<S>(_ subscriber: S) where S : Subscriber, Self.Failure == S.Failure, Self.Output == S.Input {
         subscribe(subscriber)
     }
