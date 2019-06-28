@@ -2,9 +2,9 @@ import XCTest
 import Combine
 @testable import CombineEx
 
-private let pic1 = "https://www.apple.com/autopush/cn/itunes/charts/free-apps/images/2018/2/21d871d12d8e55991510b8b7c3b069fec3fbc9027735a66af7be787290429ac4_2x.jpg"
-private let pic2 = "https://www.apple.com/autopush/cn/itunes/charts/free-apps/images/2018/2/7d30a62c2b7d9e2a4736c3845ab55ab0fe386ff946b84321010a0b3dfd7cc89c_2x.jpg"
-private let pic3 = "https://www.apple.com/autopush/cn/itunes/charts/free-apps/images/2018/2/71d601e027773a734e58e1c0034b022d3eac05ee0a80e367dc2edd9bb07e33a7_2x.jpg"
+private let pic1 = "https://avatars1.githubusercontent.com/u/9919?s=200&v=4"
+private let pic2 = "https://avatars1.githubusercontent.com/u/9919?s=200&v=4"
+private let pic3 = "https://avatars1.githubusercontent.com/u/9919?s=200&v=4"
 private let picErr = "https://hahah.com/pic.net.exist"
 private let intUrl = "http://httpbin.org/anything?result=123"
 
