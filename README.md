@@ -11,30 +11,34 @@ Swift Package Manager
 .package(url: "https://github.com/CodeEagle/CombineEx.git", from: "1.0.0")
 ```
 
+Usage
+---
+Remember to keep the `AnyCancelabel` in your own
+
 `All`
 ---
 ```swift
 // same type
-all(publisher...)
-all([publisher])
+let token = all(publisher...)
+let token = all([publisher])
 
 // different type
-all(a, b)
-// max to four different pulisher
-all(a, b, c, d)
+let token = all(a, b)
+// up to four different pulisher
+let token = all(a, b, c, d)
 ```
 
 `Any`
 ---
 ```swift
 // same type
-any(publisher...)
-any([publisher])
+let token = any(publisher...)
+let token = any([publisher])
 
 // different type
-any(a, b)
-// max to four different pulisher
-any(a, b, c, d)
+let token = any(a, b)
+// up to four different pulisher
+let token = any(a, b, c, d)
 ```
 
 `Await`
@@ -47,6 +51,6 @@ _ = try publisher.await()
 ---
 ```swift
 // only support same type racing
-race(publisher...)
-race([publisher])
+let token = race(publisher...)
+let token = race([publisher])
 ```
