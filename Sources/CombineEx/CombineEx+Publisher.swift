@@ -2,17 +2,6 @@ import Combine
 import Dispatch
 // MARK: - Public
 public extension Publisher {
-    /// **DiscardableResult** Attaches a subscriber with closure-based behavior.
-    ///
-    /// This method creates the subscriber and immediately requests an unlimited number of values, prior to returning the subscriber.
-    /// - parameter onValue: The closure to execute on receipt of a value. If `nil`, the sink uses an empty closure.
-    /// - parameter onCompletion: The closure to execute on completion. If `nil`, the sink uses an empty closure.
-    /// - Returns: A subscriber that performs the provided closures upon receiving values or completion.
-    @inline(__always)
-    @discardableResult func discardableSink(onValue: @escaping ((Self.Output) -> Void), onCompletion: ((Subscribers.Completion<Self.Failure>) -> Void)? = nil) -> Subscribers.Sink<Self> {
-        return sink(receiveCompletion: onCompletion, receiveValue: onValue)
-    }
-    
     /// Attaches the specified subscriber to this publisher.
     ///
     /// Always call this function instead of `receive(subscriber:)`.
@@ -28,16 +17,25 @@ public extension Publisher {
 
 // MARK: - Internal
 extension Publisher {
-    func sink(in group: DispatchGroup, with completion: @escaping (Result<Output, Failure>) -> Void) {
+    func sink(in group: DispatchGroup, with completion: @escaping (Result<Output, Failure>) -> Void) -> AnyCancellable {
         group.enter()
-        discardableSink(onValue: { (v) in
-            completion(.success(v))
-        }, onCompletion: { info in
+        return sink(receiveCompletion: { info in
             switch info {
-            case let .failure(error): completion(.failure(error))
+            case let .failure(error):
+                completion(.failure(error))
             case .finished: break
             }
             group.leave()
+        }, receiveValue: { (v) in
+            completion(.success(v))
         })
+    }
+}
+
+extension AnyPublisher {
+    public static func passThrough(_ processe: (PassthroughSubject<Output, Failure>) -> Void) -> AnyPublisher<Output, Failure> {
+        let subject: PassthroughSubject<Output, Failure> = .init()
+        processe(subject)
+        return subject.eraseToAnyPublisher()
     }
 }

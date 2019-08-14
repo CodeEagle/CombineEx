@@ -8,7 +8,10 @@ private let pic3 = "https://avatars1.githubusercontent.com/u/9919?s=200&v=4"
 private let picErr = "https://hahah.com/pic.net.exist"
 private let intUrl = "http://httpbin.org/anything?result=123"
 
+var token: AnyCancellable?
+
 final class CombineExTests: XCTestCase {
+
     static var allTests = [
         ("testAnyList", testAnyList),
         ("testAnyAB", testAnyAB),
@@ -34,36 +37,39 @@ extension CombineExTests {
         let pics = [pic1, pic2, picErr]
         asyncTest { (e) in
             let promises = pics.map { (url) -> AnyPublisher<Data, TestError> in
-                return .init { (completion) in
+                return .passThrough { (completion) in
                     DispatchQueue.global().async {
                         if let d = NSData(contentsOf: URL(string: url)!) {
-                            _ = completion.receive(d as Data)
-                            completion.receive(completion: .finished)
+                            completion.send(d as Data)
+                            completion.send(completion: .finished)
                         } else {
-                            completion.receive(completion: .failure(TestError.noData))
+                            completion.send(completion: .failure(TestError.noData))
                         }
                     }
                 }
             }
             let expectSuccessCount = 2
             let expectFailureCount = 1
-            any(promises).discardableSink(onValue: { (result) in
-                var successCount = 0
-                var failureCount = 0
-                for item in result {
-                    switch item {
-                    case let .failure(e):
-                        failureCount += 1
-                        assert(e == TestError.noData)
-                        
-                    case .success:
-                        successCount += 1
+            token = any(promises).sink(
+                receiveCompletion: { _ in
+                    token?.cancel()
+                    e.fulfill()
+                },
+                receiveValue: { (result) in
+                    var successCount = 0
+                    var failureCount = 0
+                    for item in result {
+                        switch item {
+                        case let .failure(e):
+                            failureCount += 1
+                            assert(e == TestError.noData)
+
+                        case .success:
+                            successCount += 1
+                        }
                     }
-                }
-                assert(successCount == expectSuccessCount, "must have two item success")
-                assert(failureCount == expectFailureCount, "must have one item failure")
-            }, onCompletion: { _ in
-                e.fulfill()
+                    assert(successCount == expectSuccessCount, "must have two item success")
+                    assert(failureCount == expectFailureCount, "must have one item failure")
             })
         }
     }
@@ -72,13 +78,16 @@ extension CombineExTests {
         let a = dataPublisher(for: pic1)
         let b = stringPublisher(for: picErr)
         asyncTest { (e) in
-            any(a, b).discardableSink(onValue: { (value) in
+            token = any(a, b).sink(
+                receiveCompletion: { _ in
+                    token?.cancel()
+                    e.fulfill()
+                },
+                receiveValue: { (value) in
                 let aValue = try? value.0.get()
                 let bValue = try? value.1.get()
                 assert(aValue != nil, "A must not fail")
                 assert(bValue == nil, "B must fail")
-            }, onCompletion: { _ in
-                e.fulfill()
             })
         }
     }
@@ -88,15 +97,18 @@ extension CombineExTests {
         let b = stringPublisher(for: picErr)
         let c = intPublisher(for: intUrl)
         asyncTest { (e) in
-            any(a, b, c).discardableSink(onValue: { (value) in
-                let aValue = try? value.0.get()
-                let bValue = try? value.1.get()
-                let cValue = try? value.2.get()
-                assert(aValue != nil, "A must not fail")
-                assert(bValue == nil, "B must fail")
-                assert(cValue != nil, "C must not fail")
-            }, onCompletion: { _ in
-                e.fulfill()
+            token = any(a, b, c).sink(
+                receiveCompletion: { _ in
+                    token?.cancel()
+                    e.fulfill()
+                },
+                receiveValue: { (value) in
+                    let aValue = try? value.0.get()
+                    let bValue = try? value.1.get()
+                    let cValue = try? value.2.get()
+                    assert(aValue != nil, "A must not fail")
+                    assert(bValue == nil, "B must fail")
+                    assert(cValue != nil, "C must not fail")
             })
         }
     }
@@ -107,17 +119,20 @@ extension CombineExTests {
         let c = intPublisher(for: intUrl)
         let d = dataPublisher(for: pic2)
         asyncTest { (e) in
-            any(a, b, c, d).discardableSink(onValue: { (value) in
-                let aValue = try? value.0.get()
-                let bValue = try? value.1.get()
-                let cValue = try? value.2.get()
-                let dValue = try? value.3.get()
-                assert(aValue != nil, "A must not fail")
-                assert(bValue == nil, "B must fail")
-                assert(cValue != nil, "C must not fail")
-                assert(dValue != nil, "D must not fail")
-            }, onCompletion: { _ in
-                e.fulfill()
+            token = any(a, b, c, d).sink(
+                receiveCompletion: { _ in
+                    token?.cancel()
+                    e.fulfill()
+                },
+                receiveValue: { (value) in
+                    let aValue = try? value.0.get()
+                    let bValue = try? value.1.get()
+                    let cValue = try? value.2.get()
+                    let dValue = try? value.3.get()
+                    assert(aValue != nil, "A must not fail")
+                    assert(bValue == nil, "B must fail")
+                    assert(cValue != nil, "C must not fail")
+                    assert(dValue != nil, "D must not fail")
             })
         }
     }
@@ -129,28 +144,15 @@ extension CombineExTests {
         case somethingWentWrong
     }
     func testAllList() {
-        let a = AnyPublisher<String, Never>.init { (completion) in
-            _ = completion.receive("A")
-            completion.receive(completion: .finished)
-        }
-        let p = AnyPublisher<String, Never>.init { (completion) in
-            _ = completion.receive("P")
-            completion.receive(completion: .finished)
-        }
-        let p2 = AnyPublisher<String, Never>.init { (completion) in
-            _ = completion.receive("P")
-            completion.receive(completion: .finished)
-        }
-        let l = AnyPublisher<String, Never>.init { (completion) in
-            _ = completion.receive("L")
-            completion.receive(completion: .finished)
-        }
-        let e = AnyPublisher<String, Never>.init { (completion) in
-            _ = completion.receive("E")
-            completion.receive(completion: .finished)
-        }
+        let a = AnyPublisher<String, Never>(Just<String>("A"))
+        let p = AnyPublisher<String, Never>(Just<String>("P"))
+        let p2 = AnyPublisher<String, Never>(Just<String>("P"))
+        let l = AnyPublisher<String, Never>(Just<String>("L"))
+        let e = AnyPublisher<String, Never>(Just<String>("E"))
+
         asyncTest { (rr) in
-            _ = all(a, p, p2, l, e).sink(receiveCompletion: { _ in
+            token = all(a, p, p2, l, e).sink(receiveCompletion: { _ in
+                token?.cancel()
                 rr.fulfill()
             }, receiveValue: { list in
                 let result = list.joined()
@@ -161,31 +163,18 @@ extension CombineExTests {
     }
     
     func testAllListError() {
-        let a = AnyPublisher<String, AllError>.init { (completion) in
-            _ = completion.receive("A")
-            completion.receive(completion: .finished)
-        }
-        let p = AnyPublisher<String, AllError>.init { (completion) in
-            _ = completion.receive("P")
-            completion.receive(completion: .finished)
-        }
-        let p2 = AnyPublisher<String, AllError>.init { (completion) in
-            completion.receive(completion: .failure(.somethingWentWrong))
-        }
-        let l = AnyPublisher<String, AllError>.init { (completion) in
-            _ = completion.receive("L")
-            completion.receive(completion: .finished)
-        }
-        let e = AnyPublisher<String, AllError>.init { (completion) in
-            _ = completion.receive("E")
-            completion.receive(completion: .finished)
-        }
-        
+        let a = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("A").eraseToAnyPublisher())
+        let p = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("P").eraseToAnyPublisher())
+        let p2 = AnyPublisher<String, AllError>(Fail<String, AllError>.init(error: .somethingWentWrong))
+        let l = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("L").eraseToAnyPublisher())
+        let e = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("E").eraseToAnyPublisher())
+
         asyncTest { (rr) in
-            _ = all(a, p, p2, l, e).sink(receiveCompletion: { info in
+            token = all(a, p, p2, l, e).sink(receiveCompletion: { info in
                 switch info {
                 case let .failure(err):
                     print(err)
+                    token?.cancel()
                     rr.fulfill()
                     
                 case .finished:
@@ -202,20 +191,21 @@ extension CombineExTests {
         let a = dataPublisher(for: pic1)
         let b = stringPublisher(for: picErr)
         asyncTest { (e) in
-            all(a, b).discardableSink(onValue: { (value) in
-                notExpectReachThisLine()
-            }, onCompletion: { info in
+            token = all(a, b).sink(receiveCompletion: { info in
                 switch info {
                 case let .failure(error):
                     switch error {
                     case .a: notExpectReachThisLine()
                     case let .b(errB):
                         print(errB)
+                        token?.cancel()
                         e.fulfill()
                     }
                 case .finished:
                     notExpectReachThisLine()
                 }
+            }, receiveValue: { (value) in
+                notExpectReachThisLine()
             })
         }
     }
@@ -224,10 +214,14 @@ extension CombineExTests {
         let a = dataPublisher(for: pic1)
         let b = dataPublisher(for: pic2)
         let c = intPublisher(for: intUrl)
+        var token: AnyCancellable?
         asyncTest { (e) in
-            all(a, b, c).discardableSink(onValue: { (value) in
-                e.fulfill()
-            })
+            token = all(a, b, c).sink(
+                receiveCompletion: { (_) in },
+                receiveValue: { (_) in
+                    token?.cancel()
+                    e.fulfill()
+                })
         }
     }
     
@@ -237,7 +231,9 @@ extension CombineExTests {
         let c = intPublisher(for: intUrl)
         let d = dataPublisher(for: pic3)
         asyncTest { (e) in
-            all(a, b, c, d).discardableSink(onValue: { (value) in
+            token = all(a, b, c, d).sink(receiveCompletion: { (_) in
+                token?.cancel()
+            }, receiveValue: { (value) in
                 e.fulfill()
             })
         }
@@ -251,22 +247,22 @@ extension CombineExTests {
     }
     
     func testRaceList() {
-        let itemA = AnyPublisher<String, AllError>.init { (completion) in
+        let itemA = AnyPublisher<String, AllError>.passThrough { (completion) in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                _ = completion.receive("Lincoln")
-                completion.receive(completion: .finished)
+                completion.send("Lincoln")
+                completion.send(completion: .finished)
             }
         }
         
-        let itemB = AnyPublisher<String, AllError>.init { (completion) in
+        let itemB = AnyPublisher<String, AllError>.passThrough { (completion) in
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                _ = completion.receive("Alice")
-                completion.receive(completion: .finished)
+                completion.send("Alice")
+                completion.send(completion: .finished)
             }
         }
         
         asyncTest { (e) in
-            _ = race(itemA, itemB).sink(receiveCompletion: { _ in
+            token = race(itemA, itemB).sink(receiveCompletion: { _ in
                 e.fulfill()
             }, receiveValue: { result in
                 assert(result == "Lincoln")
@@ -275,20 +271,20 @@ extension CombineExTests {
     }
     
     func testRaceListError() {
-        let itemA = AnyPublisher<String, RaceError>.init { (completion) in
+        let itemA = AnyPublisher<String, RaceError>.passThrough { (completion) in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                completion.receive(completion: .failure(.oops))
+                completion.send(completion: .failure(.oops))
             }
         }
         
-        let itemB = AnyPublisher<String, RaceError>.init { (completion) in
+        let itemB = AnyPublisher<String, RaceError>.passThrough { (completion) in
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                completion.receive(completion: .failure(.oops))
+                completion.send(completion: .failure(.oops))
             }
         }
         
         asyncTest { (e) in
-            _ = race(itemA, itemB).sink(receiveCompletion: { info in
+            token = race(itemA, itemB).sink(receiveCompletion: { info in
                 switch info {
                 case .failure: e.fulfill()
                 case .finished: break
@@ -329,40 +325,40 @@ extension CombineExTests {
     }
     
     private func dataPublisher(for url: String) -> AnyPublisher<Data, TestError> {
-        return .init { (completion) in
+        return .passThrough { (completion) in
             DispatchQueue.global(qos: .background).async {
                 if let d = NSData(contentsOf: URL(string: url)!) {
-                    _ = completion.receive(d as Data)
-                    completion.receive(completion: .finished)
+                    completion.send(d as Data)
+                    completion.send(completion: .finished)
                 } else {
-                    completion.receive(completion: .failure(TestError.noData))
+                    completion.send(completion: .failure(TestError.noData))
                 }
             }
         }
     }
     
     private func stringPublisher(for url: String) -> AnyPublisher<String, TestError> {
-        return .init { (completion) in
+        return .passThrough { (completion) in
             DispatchQueue.global(qos: .utility).async {
                 if let d = NSData(contentsOf: URL(string: url)!) {
-                    _ = completion.receive(d.description)
-                    completion.receive(completion: .finished)
+                    completion.send(d.description)
+                    completion.send(completion: .finished)
                 } else {
-                    completion.receive(completion: .failure(TestError.noData))
+                    completion.send(completion: .failure(TestError.noData))
                 }
             }
         }
     }
     
     private func intPublisher(for url: String) -> AnyPublisher<Int, TestError> {
-        return .init { (completion) in
+        return .passThrough { (completion) in
             DispatchQueue.global(qos: .userInitiated).async {
                 if let d = NSData(contentsOf: URL(string: url)!) {
                     let result = try! JSONDecoder().decode(Warp.self, from: d as Data)
-                    _ = completion.receive(Int(result.args.result)!)
-                    completion.receive(completion: .finished)
+                    completion.send(Int(result.args.result)!)
+                    completion.send(completion: .finished)
                 } else {
-                    completion.receive(completion: .failure(TestError.noData))
+                    completion.send(completion: .failure(TestError.noData))
                 }
             }
         }
