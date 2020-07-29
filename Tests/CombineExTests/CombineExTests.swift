@@ -162,6 +162,50 @@ extension CombineExTests {
         }
     }
     
+    func testAllWithDelayList() {
+        let a = delayPublisher(for: "A", delay: DispatchTime.now() + 2)
+        let p = delayPublisher(for: "P", delay: DispatchTime.now() + 4)
+        let p2 = delayPublisher(for: "P", delay: DispatchTime.now() + 6)
+        let l = delayPublisher(for: "L", delay: DispatchTime.now() + 8)
+        let e = delayPublisher(for: "E", delay: DispatchTime.now() + 10)
+
+        asyncTest { (rr) in
+            token = all(a, p, p2, l, e, maxConcurrent: 3).sink(receiveCompletion: { _ in
+                token?.cancel()
+                rr.fulfill()
+            }, receiveValue: { list in
+                let result = list.joined()
+                print(result)
+                assert(result == "APPLE")
+            })
+        }
+    }
+    
+    func testAllSListError() {
+        let a = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("A").print().eraseToAnyPublisher())
+        let p = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("P").print().eraseToAnyPublisher())
+        let p2 = AnyPublisher<String, AllError>(Fail<String, AllError>.init(error: .somethingWentWrong))
+        let l = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("L").print().eraseToAnyPublisher())
+        let e = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("E").print().eraseToAnyPublisher())
+
+        asyncTest { (rr) in
+            token = all(a, p, p2, l, e, maxConcurrent: 2).sink(receiveCompletion: { info in
+                switch info {
+                case let .failure(err):
+                    print(err)
+                    token?.cancel()
+                    rr.fulfill()
+                    
+                case .finished:
+                    notExpectReachThisLine()
+                }
+                
+            }, receiveValue: { list in
+                notExpectReachThisLine()
+            })
+        }
+    }
+    
     func testAllListError() {
         let a = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("A").eraseToAnyPublisher())
         let p = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("P").eraseToAnyPublisher())
@@ -324,11 +368,11 @@ extension CombineExTests {
         }
     }
     
-    private func dataPublisher(for url: String) -> AnyPublisher<Data, TestError> {
+    private func stringPublisher(for url: String) -> AnyPublisher<String, TestError> {
         return .passThrough { (completion) in
-            DispatchQueue.global(qos: .background).async {
+            DispatchQueue.global(qos: .utility).async {
                 if let d = NSData(contentsOf: URL(string: url)!) {
-                    completion.send(d as Data)
+                    completion.send(d.description)
                     completion.send(completion: .finished)
                 } else {
                     completion.send(completion: .failure(TestError.noData))
@@ -337,11 +381,20 @@ extension CombineExTests {
         }
     }
     
-    private func stringPublisher(for url: String) -> AnyPublisher<String, TestError> {
+    private func delayPublisher<T>(for value: T, delay: DispatchTime) -> AnyPublisher<T, TestError> {
+        return .passThrough(isPrintEnabled: true) { (completion) in
+            DispatchQueue.main.asyncAfter(deadline: delay) {
+                completion.send(value)
+                completion.send(completion: .finished)
+            }
+        }
+    }
+    
+    private func dataPublisher(for url: String) -> AnyPublisher<Data, TestError> {
         return .passThrough { (completion) in
-            DispatchQueue.global(qos: .utility).async {
+            DispatchQueue.global(qos: .background).async {
                 if let d = NSData(contentsOf: URL(string: url)!) {
-                    completion.send(d.description)
+                    completion.send(d as Data)
                     completion.send(completion: .finished)
                 } else {
                     completion.send(completion: .failure(TestError.noData))

@@ -1,50 +1,114 @@
 import Combine
 import Foundation
 
-public func all<Value, Failure>(_ promises: AnyPublisher<Value, Failure>..., on queue: DispatchQueue = .main) -> AnyPublisher<[Value], Failure> where Failure: Error {
-    all(promises, on: queue)
+public func all<Value, Failure>(_ promises: AnyPublisher<Value, Failure>..., on queue: DispatchQueue = .main, maxConcurrent: Int = 10) -> AnyPublisher<[Value], Failure> where Failure: Error {
+    all(promises, on: queue, maxConcurrent: maxConcurrent)
 }
 
-public func all<Value, Failure>(_ promises: [AnyPublisher<Value, Failure>], on queue: DispatchQueue = .main) -> AnyPublisher<[Value], Failure> where Failure: Error {
+public func all<Value, Failure>(_ promises: [AnyPublisher<Value, Failure>], on queue: DispatchQueue = .main, maxConcurrent: Int = 10) -> AnyPublisher<[Value], Failure> where Failure: Error {
     .passThrough { (subject) in
         let group = DispatchGroup()
         var error: Failure?
         var tokens: [AnyCancellable] = []
         var values: [Int : Value] = [:]
         let proQueue: DispatchQueue = .init(label: "all.property", attributes: .concurrent)
-
-        for (index, item) in promises.enumerated() {
-
-            guard proQueue.sync(execute: { return error }) == nil else { return }
-
-            let token = item.sink(in: group, with: { result in
-                guard proQueue.sync (execute: { return error }) == nil else { return }
-
-                switch result {
-                case let .success(v):
-                    proQueue.async(flags: .barrier) {
-                        values[index] = v
-                    }
-
-                case let .failure(e):
-                    proQueue.async(flags: .barrier) { error = e }
-                    subject.send(completion: .failure(e))
-                }
-            })
-            tokens.append(token)
-        }
-        let id: UUID = .init()
-        TokenManager.shared.addBox(.init(uuid: id, tokens: tokens))
-
-        group.notify(queue: queue) {
-            defer { TokenManager.shared.removeBox(by: id) }
+        let size = promises.count
+        
+        func ended() {
             guard error == nil else { return }
 
-            let list =  proQueue.sync(execute: { values.sorted { $0.key < $1.key } })
+            let list = proQueue.sync(execute: { values.sorted { $0.key < $1.key } })
             let ret = list.map { $0.value }
 
             subject.send(ret)
             subject.send(completion: .finished)
+        }
+        if maxConcurrent < size, maxConcurrent > 0 {
+            var _currentEnqueuedCount = 0
+            var _enqueuedIndex = 0
+            var _completedCount = 0
+            var currentEnqueuedCount: Int {
+                get { proQueue.sync { _currentEnqueuedCount } }
+                set { proQueue.async(flags: .barrier) {
+                    _currentEnqueuedCount = newValue
+                }}
+            }
+            var enqueuedIndex: Int {
+                get { proQueue.sync { _enqueuedIndex } }
+                set { proQueue.async(flags: .barrier) {
+                    _enqueuedIndex = newValue
+                }}
+            }
+            var completedCount: Int {
+                get { proQueue.sync { _completedCount } }
+                set { proQueue.async(flags: .barrier) {
+                    _completedCount = newValue
+                }}
+            }
+            
+            func startOne() {
+                let item = promises[enqueuedIndex]
+                enqueuedIndex += 1
+                currentEnqueuedCount += 1
+                guard proQueue.sync(execute: { return error }) == nil else { return }
+                let token = item.sink( { [index = enqueuedIndex] result in
+                    defer {
+                        currentEnqueuedCount -= 1
+                        completedCount += 1
+                        checkAndStartNext()
+                    }
+                    guard proQueue.sync (execute: { return error }) == nil else { return }
+                    switch result {
+                    case let .success(v):
+                        proQueue.async(flags: .barrier) { values[index] = v }
+
+                    case let .failure(e):
+                        proQueue.async(flags: .barrier) { error = e }
+                        subject.send(completion: .failure(e))
+                    }
+                })
+                tokens.append(token)
+            }
+            
+            func checkAndStartNext() {
+                while currentEnqueuedCount < maxConcurrent, enqueuedIndex < size {
+                    startOne()
+                }
+                
+                if completedCount == size {
+                    ended()
+                }
+            }
+            checkAndStartNext()
+        } else {
+            for (index, item) in promises.enumerated() {
+
+                guard proQueue.sync(execute: { return error }) == nil else { return }
+
+                let token = item.sink(in: group, with: { result in
+                    guard proQueue.sync (execute: { return error }) == nil else { return }
+
+                    switch result {
+                    case let .success(v):
+                        proQueue.async(flags: .barrier) {
+                            values[index] = v
+                        }
+
+                    case let .failure(e):
+                        proQueue.async(flags: .barrier) { error = e }
+                        subject.send(completion: .failure(e))
+                    }
+                })
+                tokens.append(token)
+            }
+            
+            let id: UUID = .init()
+            TokenManager.shared.addBox(.init(uuid: id, tokens: tokens))
+
+            group.notify(queue: queue) {
+                defer { TokenManager.shared.removeBox(by: id) }
+                ended()
+            }
         }
     }
 }

@@ -30,12 +30,25 @@ extension Publisher {
             completion(.success(v))
         })
     }
+    
+    func sink(_ completion: @escaping (Result<Output, Failure>) -> Void) -> AnyCancellable {
+        return sink(receiveCompletion: { info in
+            switch info {
+            case let .failure(error):
+                completion(.failure(error))
+            case .finished: break
+            }
+        }, receiveValue: { (v) in
+            completion(.success(v))
+        })
+    }
 }
 
 extension AnyPublisher {
-    public static func passThrough(_ processe: (PassthroughSubject<Output, Failure>) -> Void) -> AnyPublisher<Output, Failure> {
+    public static func passThrough(_ processe: (PassthroughSubject<Output, Failure>) -> Void, isPrintEnabled: Bool = false) -> AnyPublisher<Output, Failure> {
         let subject: PassthroughSubject<Output, Failure> = .init()
         processe(subject)
-        return subject.eraseToAnyPublisher()
+        let val = isPrintEnabled ? subject.print().eraseToAnyPublisher() : subject.eraseToAnyPublisher()
+        return val
     }
 }
