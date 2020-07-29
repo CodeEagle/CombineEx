@@ -11,7 +11,7 @@ private let intUrl = "http://httpbin.org/anything?result=123"
 var token: AnyCancellable?
 
 final class CombineExTests: XCTestCase {
-
+    
     static var allTests = [
         ("testAnyList", testAnyList),
         ("testAnyAB", testAnyAB),
@@ -63,14 +63,14 @@ extension CombineExTests {
                         case let .failure(e):
                             failureCount += 1
                             assert(e == TestError.noData)
-
+                            
                         case .success:
                             successCount += 1
                         }
                     }
                     assert(successCount == expectSuccessCount, "must have two item success")
                     assert(failureCount == expectFailureCount, "must have one item failure")
-            })
+                })
         }
     }
     
@@ -84,11 +84,11 @@ extension CombineExTests {
                     e.fulfill()
                 },
                 receiveValue: { (value) in
-                let aValue = try? value.0.get()
-                let bValue = try? value.1.get()
-                assert(aValue != nil, "A must not fail")
-                assert(bValue == nil, "B must fail")
-            })
+                    let aValue = try? value.0.get()
+                    let bValue = try? value.1.get()
+                    assert(aValue != nil, "A must not fail")
+                    assert(bValue == nil, "B must fail")
+                })
         }
     }
     
@@ -109,7 +109,7 @@ extension CombineExTests {
                     assert(aValue != nil, "A must not fail")
                     assert(bValue == nil, "B must fail")
                     assert(cValue != nil, "C must not fail")
-            })
+                })
         }
     }
     
@@ -133,7 +133,7 @@ extension CombineExTests {
                     assert(bValue == nil, "B must fail")
                     assert(cValue != nil, "C must not fail")
                     assert(dValue != nil, "D must not fail")
-            })
+                })
         }
     }
 }
@@ -144,12 +144,12 @@ extension CombineExTests {
         case somethingWentWrong
     }
     func testAllList() {
-        let a = AnyPublisher<String, Never>(Just<String>("A"))
-        let p = AnyPublisher<String, Never>(Just<String>("P"))
-        let p2 = AnyPublisher<String, Never>(Just<String>("P"))
-        let l = AnyPublisher<String, Never>(Just<String>("L"))
-        let e = AnyPublisher<String, Never>(Just<String>("E"))
-
+        let a = { AnyPublisher<String, Never>(Just<String>("A")) }()
+        let p = { AnyPublisher<String, Never>(Just<String>("P")) }()
+        let p2 = { AnyPublisher<String, Never>(Just<String>("P")) }()
+        let l = { AnyPublisher<String, Never>(Just<String>("L")) }()
+        let e = { AnyPublisher<String, Never>(Just<String>("E")) }()
+        
         asyncTest { (rr) in
             token = all(a, p, p2, l, e).sink(receiveCompletion: { _ in
                 token?.cancel()
@@ -163,14 +163,14 @@ extension CombineExTests {
     }
     
     func testAllWithDelayList() {
-        let a = delayPublisher(for: "A", delay: DispatchTime.now() + 2)
-        let p = delayPublisher(for: "P", delay: DispatchTime.now() + 4)
-        let p2 = delayPublisher(for: "P", delay: DispatchTime.now() + 6)
-        let l = delayPublisher(for: "L", delay: DispatchTime.now() + 8)
-        let e = delayPublisher(for: "E", delay: DispatchTime.now() + 10)
-
+        let a = { self.delayPublisher(for: "A", delay: DispatchTime.now() + 1) }
+        let p = { self.delayPublisher(for: "P", delay: DispatchTime.now() + 1) }
+        let p2 = { self.delayPublisher(for: "P", delay: DispatchTime.now() + 1) }
+        let l = { self.delayPublisher(for: "L", delay: DispatchTime.now() + 1) }
+        let e = { self.delayPublisher(for: "E", delay: DispatchTime.now() + 1) }
+        
         asyncTest { (rr) in
-            token = all(a, p, p2, l, e, maxConcurrent: 3).sink(receiveCompletion: { _ in
+            token = all([a, p, p2, l, e], maxConcurrent: 1).sink(receiveCompletion: { _ in
                 token?.cancel()
                 rr.fulfill()
             }, receiveValue: { list in
@@ -187,9 +187,9 @@ extension CombineExTests {
         let p2 = AnyPublisher<String, AllError>(Fail<String, AllError>.init(error: .somethingWentWrong))
         let l = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("L").print().eraseToAnyPublisher())
         let e = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("E").print().eraseToAnyPublisher())
-
+        
         asyncTest { (rr) in
-            token = all(a, p, p2, l, e, maxConcurrent: 2).sink(receiveCompletion: { info in
+            token = all(a, p, p2, l, e).sink(receiveCompletion: { info in
                 switch info {
                 case let .failure(err):
                     print(err)
@@ -212,7 +212,7 @@ extension CombineExTests {
         let p2 = AnyPublisher<String, AllError>(Fail<String, AllError>.init(error: .somethingWentWrong))
         let l = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("L").eraseToAnyPublisher())
         let e = AnyPublisher<String, AllError>(Result<String, AllError>.Publisher("E").eraseToAnyPublisher())
-
+        
         asyncTest { (rr) in
             token = all(a, p, p2, l, e).sink(receiveCompletion: { info in
                 switch info {
